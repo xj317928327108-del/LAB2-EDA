@@ -1,0 +1,160 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Resolve the issue of Chinese display-解决中文显示
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False
+
+# 1. Read data-读取数据
+df = pd.read_csv("WorldEnergy.csv")
+
+# 2. Only select 4 fixed core variables + country, year-只选取固定4个核心变量 + 国家、年份
+df = df[['country', 'year', 'gdp', 'population', 
+          'solar_consumption', 'fossil_share_energy']].copy()
+
+# 3. Remove missing values-删除缺失值
+df = df.dropna()
+
+# 4. Delete duplicate data (by country + year)-删除重复数据（按国家+年份）
+df = df.drop_duplicates(subset=['country', 'year'], keep='first')
+
+# 5. The IQR method is used to eliminate outliers (as required by the teacher)-IQR法剔除异常值（老师要求）
+def remove_outliers_iqr(data, col):
+    Q1 = data[col].quantile(0.25)
+    Q3 = data[col].quantile(0.75)
+    IQR = Q3 - Q1
+    lower = Q1 - 3 * IQR
+    upper = Q3 + 3 * IQR
+    return data[(data[col] >= lower) & (data[col] <= upper)]
+
+df_clean = remove_outliers_iqr(df, 'solar_consumption')
+df_clean = remove_outliers_iqr(df_clean, 'gdp')
+df_clean = remove_outliers_iqr(df_clean, 'population')
+
+print("Number of data items before cleaning:", len(df))
+print("Number of data after cleaning:", len(df_clean))
+
+# ==========================
+# Univariate analysis - Solar energy time trend 单变量分析 - 太阳能时间趋势
+# ==========================
+year_solar = df_clean.groupby('year')['solar_consumption'].sum().reset_index()
+
+plt.figure(figsize=(12, 5))
+plt.plot(year_solar['year'], year_solar['solar_consumption'], 
+         color='#ff7f0e', linewidth=3, marker='o', markersize=3)
+plt.title('1. The annual trend of global solar energy consumption', fontsize=14)
+plt.xlabel('year', fontsize=12)
+plt.ylabel('solar_consumption', fontsize=12)
+plt.grid(alpha=0.3)
+plt.show()
+
+# ==========================
+# Univariate analysis - Solar energy distribution histogram 单变量分析 - 太阳能分布直方图
+# ==========================
+plt.figure(figsize=(10, 4))
+sns.histplot(df_clean['solar_consumption'], bins=30, color='#ff7f0e', kde=True)
+plt.title('2. Histogram of global solar energy consumption distribution', fontsize=14)
+plt.xlabel('solar_consumption', fontsize=12)
+plt.ylabel('Frequency', fontsize=12)
+plt.grid(alpha=0.3)
+plt.show()
+
+# ==========================
+# Bivariate analysis - Correlation heatmap 双变量分析 - 相关性热力图
+# ==========================
+corr_cols = ['solar_consumption', 'gdp', 'population', 'fossil_share_energy']
+corr_matrix = df_clean[corr_cols].corr()
+
+plt.figure(figsize=(9, 6))
+sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, 
+             linewidths=0.5, fmt='.2f')
+plt.title('3. Core variable correlation heatmap', fontsize=14)
+plt.show()
+
+# ==========================
+# Bivariate - Scatter plot of GDP and Solar Energy 双变量 - GDP与太阳能散点图
+# ==========================
+plt.figure(figsize=(10, 5))
+sns.scatterplot(data=df_clean, x='gdp', y='solar_consumption', 
+                 color='#ff7f0e', alpha=0.6)
+plt.title('4. The relationship between GDP and solar energy consumption', fontsize=14)
+plt.xlabel('GDP', fontsize=12)
+plt.ylabel('solar_consumption', fontsize=12)
+plt.grid(alpha=0.3)
+plt.show()
+
+# ==========================
+# Bivariate - Scatter plot of fossil energy proportion and solar energy 双变量 - 化石能源占比与太阳能散点图
+# ==========================
+plt.figure(figsize=(10, 5))
+sns.scatterplot(data=df_clean, x='fossil_share_energy', y='solar_consumption', 
+                 color='#1f77b4', alpha=0.6)
+plt.title('5. The relationship between the proportion of fossil energy and the consumption of solar energy', fontsize=14)
+plt.xlabel('fossil_share_energy', fontsize=12)
+plt.ylabel('solar_consumption', fontsize=12)
+plt.grid(alpha=0.3)
+plt.show()
+
+# ==========================
+# Multivariate comprehensive relationship diagram 多变量综合关系图
+# ==========================
+sns.pairplot(df_clean[corr_cols], kind='reg', diag_kind='kde', 
+             plot_kws={'line_kws':{'color':'red'}})
+plt.suptitle('6. Multivariate interaction relationship diagram', y=1.02, fontsize=14)
+plt.show()
+
+# ==========================
+# Regional Difference Analysis (Grouped Box Plot)-地区差异分析（分组箱线图）
+# ==========================
+# Expand the complete mapping of major energy-producing continents and no longer discard a large amount of data-扩充完整主流能源国家大洲映射，不再大量丢数据
+continent_map = {
+    'China': 'Asia', 'India': 'Asia', 'Japan': 'Asia', 'South Korea':'Asia',
+    'United States': 'North America', 'Canada': 'North America',
+    'Germany': 'Europe', 'France': 'Europe', 'United Kingdom': 'Europe',
+    'Italy':'Europe', 'Spain':'Europe' #, 'Australia':'Oceania', 'Brazil':'South America'
+}
+df_clean['continent'] = df_clean['country'].map(continent_map) #.fillna("Other")
+
+# Canvas optimization + standard academic box plot, removing abnormal blank areas 画布优化 + 标准学术箱线图，去掉畸形空白
+plt.figure(figsize=(11, 6))
+# Standard clean box lines, removing unnecessary distractions, with standardized color schemes-标准干净箱线，去掉多余干扰，配色规范
+sns.boxplot(
+    x="continent", 
+    y="solar_consumption", 
+    data=df_clean,
+    palette="Set3",
+    fliersize=3   # The size of the outliers is moderate. 异常点大小适中
+)
+
+plt.title('7. The differences in solar energy consumption among various continents', fontsize=14)
+plt.xlabel('Continent', fontsize=12)
+plt.ylabel('solar_consumption', fontsize=12)
+plt.grid(axis="y", alpha=0.3)
+plt.tight_layout() # Automatic adaptation, text is not truncated 自动适配，文字不被截断
+plt.show()
+
+
+
+
+
+
+
+
+
+#continent_map = {
+ #   'China': 'Asia', 'India': 'Asia', 'Japan': 'Asia',
+  #  'United States': 'North America', 'Canada': 'North America',
+  #  'Germany': 'Europe', 'France': 'Europe', 'United Kingdom': 'Europe'
+#}
+#df_clean['continent'] = df_clean['country'].map(continent_map)
+#df_continent = df_clean.dropna(subset=['continent'])
+
+#plt.figure(figsize=(12, 5))
+#sns.boxplot(x='continent', y='solar_consumption', data=df_continent, palette='Set2')
+#plt.title('7. The differences in solar energy consumption among various continents', fontsize=14)
+#plt.xlabel('Continent', fontsize=12)
+#plt.ylabel('solar_consumption', fontsize=12)
+#plt.grid(alpha=0.3)
+#plt.show()
